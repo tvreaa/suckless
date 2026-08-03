@@ -1,0 +1,77 @@
+diff --git a/st.c b/st.c
+index 5857a97..c77ffd9 100644
+--- a/st.c
++++ b/st.c
+@@ -117,6 +117,7 @@ typedef struct {
+ typedef struct {
+ 	int row;      /* nb row */
+ 	int col;      /* nb col */
++	int colc;     /* capacity col */
+ 	Line *line;   /* screen */
+ 	Line *alt;    /* alternate screen */
+ 	Line hist[HISTSIZE]; /* history buffer */
+@@ -2645,6 +2646,7 @@ tresize(int col, int row)
+ 	int i, j;
+ 	int minrow = MIN(row, term.row);
+ 	int mincol = MIN(col, term.col);
++	int truecol = MAX(col, term.colc);
+ 	int *bp;
+ 	TCursor c;
+ 
+@@ -2677,11 +2679,11 @@ tresize(int col, int row)
+ 	term.line = xrealloc(term.line, row * sizeof(Line));
+ 	term.alt  = xrealloc(term.alt,  row * sizeof(Line));
+ 	term.dirty = xrealloc(term.dirty, row * sizeof(*term.dirty));
+-	term.tabs = xrealloc(term.tabs, col * sizeof(*term.tabs));
++	term.tabs = xrealloc(term.tabs, truecol * sizeof(*term.tabs));
+ 
+ 	for (i = 0; i < HISTSIZE; i++) {
+-		term.hist[i] = xrealloc(term.hist[i], col * sizeof(Glyph));
+-		for (j = mincol; j < col; j++) {
++		term.hist[i] = xrealloc(term.hist[i], truecol * sizeof(Glyph));
++		for (j = term.colc; j < truecol; j++) {
+ 			term.hist[i][j] = term.c.attr;
+ 			term.hist[i][j].u = ' ';
+ 		}
+@@ -2689,14 +2691,14 @@ tresize(int col, int row)
+ 
+ 	/* resize each row to new width, zero-pad if needed */
+ 	for (i = 0; i < minrow; i++) {
+-		term.line[i] = xrealloc(term.line[i], col * sizeof(Glyph));
+-		term.alt[i]  = xrealloc(term.alt[i],  col * sizeof(Glyph));
++		term.line[i] = xrealloc(term.line[i], truecol * sizeof(Glyph));
++		term.alt[i]  = xrealloc(term.alt[i],  truecol * sizeof(Glyph));
+ 	}
+ 
+ 	/* allocate any new rows */
+ 	for (/* i = minrow */; i < row; i++) {
+-		term.line[i] = xmalloc(col * sizeof(Glyph));
+-		term.alt[i] = xmalloc(col * sizeof(Glyph));
++		term.line[i] = xmalloc(truecol * sizeof(Glyph));
++		term.alt[i] = xmalloc(truecol * sizeof(Glyph));
+ 	}
+ 	if (col > term.col) {
+ 		bp = term.tabs + term.col;
+@@ -2717,15 +2719,18 @@ tresize(int col, int row)
+ 	/* Clearing both screens (it makes dirty all lines) */
+ 	c = term.c;
+ 	for (i = 0; i < 2; i++) {
+-		if (mincol < col && 0 < minrow) {
+-			tclearregion(mincol, 0, col - 1, minrow - 1);
++		if (term.colc < col && 0 < minrow) {
++			tclearregion(term.colc, 0, col - 1, minrow - 1);
+ 		}
+-		if (0 < col && minrow < row) {
+-			tclearregion(0, minrow, col - 1, row - 1);
++		if (0 < truecol && minrow < row) {
++			term.col = truecol; /* temporary override for LIMIT inside tclearregion */
++			tclearregion(0, minrow, truecol - 1, row - 1);
++			term.col = col;
+ 		}
+ 		tswapscreen();
+ 		tcursor(CURSOR_LOAD);
+ 	}
++	term.colc = truecol;
+ 	term.c = c;
+ }
+ 
